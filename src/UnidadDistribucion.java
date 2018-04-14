@@ -61,7 +61,7 @@ public class UnidadDistribucion extends Thread{
 	}
 	
 	public void asignarAlgoritmos(){
-		algs = ALG + SG + sim + asim + hmac;
+		algs = ALG + SG + sim + SG + asim + SG + hmac;
 	}
 	
 	
