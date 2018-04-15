@@ -99,6 +99,8 @@ public class UnidadDistribucion{
 	public final static String ESTADO = "ESTADO";
 	public final static String OK = "OK";
 	public final static String ERROR = "ERROR";
+	public final static String ACT1 = "ACT1";
+	public final static String ACT2 = "ACT2";
 
 	private String algs;
 	private String sim;
@@ -112,6 +114,7 @@ public class UnidadDistribucion{
 
 	private KeyPair keyPair;
 	private SecretKey llaveSim;
+	private byte[] llaveCreada;
 
 	public UnidadDistribucion() {
 		sim = BLOWFISH;
@@ -198,12 +201,12 @@ public class UnidadDistribucion{
 					if(in.readLine().equals(CERTIFICADOSV)){
 						out.println(ESTADO+SG+OK);
 						if(in.readLine().equals(INIC)){
-							out.println("ACT1");
-							out.println("ACT2");
+							out.println(ACT1);
+							out.println(ACT2);
 						}
 					}
 				}
-//				System.out.println("respuesta: "+in.readLine());
+				//				System.out.println("respuesta: "+in.readLine());
 			}
 			else if(respuesta.equals("ERROR"))
 			{
@@ -214,7 +217,7 @@ public class UnidadDistribucion{
 
 
 
-	public void conexion4443() throws IOException
+	public void conexion4443() throws Exception
 	{
 
 		out.println("HOLA");
@@ -226,36 +229,56 @@ public class UnidadDistribucion{
 			if(in.readLine().equals(ESTADO+SG+OK))
 			{
 				out.println(CERTIFICADOCL);
-				try {
-					X509Certificate cert = generateV3Certificate(this.keyPair);
-					imprimircert(cert);
-					//					out.println(ESTADO+SG+OK);
+				X509Certificate cert = generateV3Certificate(this.keyPair);
+				imprimircert(cert);
+				//					out.println(ESTADO+SG+OK);
+				if(in.readLine().equals(ESTADO+SG+OK)){
 					if(in.readLine().equals(CERTIFICADOSV)){
-						out.println(ESTADO+SG+OK);
 						X509Certificate certServ = 	leerCertificado();
-						byte[] arr = leerllave();
-						llaveSim = descifrar(arr);
-						byte[] cifrada = cifrarLlave(certServ.getPublicKey());
-						String codificada = codificarHex(cifrada);
-						out.println(codificada);
-						consultar();
-						String serv =in.readLine();
-						leerResultado(serv);
-					}
-					
+						//out.println(ESTADO+SG+OK);
+						String[] resp = (in.readLine()).split(":");
+						llaveCreada = descifrar(DatatypeConverter.parseHexBinary(resp[1]), asim, this.keyPair.getPrivate());
+						llaveSim = new SecretKeySpec(llaveCreada, 0, llaveCreada.length, sim);
 
-					
-				}
-				catch (Exception e) {
-					e.printStackTrace();
+						//COORDENADAS
+						String coordenadas = "4.46,5.16";
+
+
+						byte[] act1A = cifrar(coordenadas.getBytes(), sim, llaveSim);
+						String act1 = hexadecimal(act1A);
+						out.println(ACT1 + ":" + act1);
+
+						// Paso 12
+						byte[] integridad = generarIntegridad(coordenadas.getBytes(), hmac, llaveSim);
+						byte[] act2A = cifrar(integridad, asim, certServ.getPublicKey());
+						String act2 = hexadecimal(act2A);
+						out.println(ACT2 + ":" + act2);
+					}
 				}
 			}
-			else if(respuesta.equals("ERROR"))
-			{
-				System.out.println("ERROR EN EL SERVIDOR");
-			}
-		}	
+
+
+
+			//				if(in.readLine().equals(CERTIFICADOSV)){
+			//					out.println(ESTADO+SG+OK);
+			//					X509Certificate certServ = 	leerCertificado();
+			//					byte[] arr = leerllave();
+			//					llaveSim = descifrar(arr);
+			//					byte[] cifrada = cifrarLlave(certServ.getPublicKey());
+			//					String codificada = codificarHex(cifrada);
+			//					out.println(codificada);
+			//					consultar();
+			//					String serv =in.readLine();
+			//					leerResultado(serv);
+			//				}
+
+		}
+		else if(respuesta.equals("ERROR"))
+		{
+			System.out.println("ERROR EN EL SERVIDOR");
+		}
 	}
+
 
 	/**
 	 * Se genera un certificado digital respecto a una llave.
@@ -298,16 +321,27 @@ public class UnidadDistribucion{
 	}
 
 
+	public byte[] generarIntegridad(byte[] mensaje, String algoritmo, Key llave) throws IOException {
+		byte[] integridad = null;
+		try {
+			Mac generador = Mac.getInstance(algoritmo);
+			generador.init(llave);
+			integridad = generador.doFinal(mensaje);
+		} catch (Exception e) {
 
+		}
 
-	public byte[] hmacDigest(byte[] msg, Key key, String algo) throws NoSuchAlgorithmException,
-	InvalidKeyException, IllegalStateException, UnsupportedEncodingException {
-		Mac mac = Mac.getInstance(algo);
-		mac.init(key);
-
-		byte[] bytes = mac.doFinal(msg);
-		return bytes;
+		return integridad;
 	}
+
+	//	public byte[] hmacDigest(byte[] msg, Key key, String algo) throws NoSuchAlgorithmException,
+	//	InvalidKeyException, IllegalStateException, UnsupportedEncodingException {
+	//		Mac mac = Mac.getInstance(algo);
+	//		mac.init(key);
+	//
+	//		byte[] bytes = mac.doFinal(msg);
+	//		return bytes;
+	//	}
 
 	public static byte[] symmetricDecryption (byte[] msg, Key key , String algo)
 			throws IllegalBlockSizeException, BadPaddingException, InvalidKeyException, 
@@ -325,20 +359,6 @@ public class UnidadDistribucion{
 		System.out.println(respuesta);
 	}
 
-	public void consultar() throws IOException, InvalidKeyException, NoSuchAlgorithmException, IllegalStateException, IllegalBlockSizeException, BadPaddingException, NoSuchPaddingException
-	{
-		if(in.readLine().equals("OK"))
-		{
-			String consulta = "201517263";
-
-			byte[] digest = hmacDigest(consulta.getBytes(),llaveSim, hmac);
-			byte[] consultaCifrada = symmetricEncryption(consulta.getBytes(), llaveSim, sim);
-			byte[] digestCifrado = symmetricEncryption(digest, llaveSim, sim);
-			String resp = codificarHex(consultaCifrada)+":"+codificarHex(digestCifrado);
-			System.out.println(resp);
-			out.println(resp);
-		}
-	}
 
 	public void imprimircert(X509Certificate certificado) throws Exception
 	{
@@ -352,9 +372,9 @@ public class UnidadDistribucion{
 	public X509Certificate leerCertificado() throws IOException
 	{
 		X509Certificate cert = null;
-		byte[] certificadoClienteBytes = new byte['ᎈ'];
-		is.read(certificadoClienteBytes);
-		InputStream inputStream = new ByteArrayInputStream(certificadoClienteBytes);
+		//	byte[] certificadoClienteBytes = new byte['ᎈ'];
+		//		is.read(certificadoClienteBytes);
+		//		InputStream inputStream = new ByteArrayInputStream(certificadoClienteBytes);
 		try {
 			cert = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(is);
 			System.out.println(cert.toString());
@@ -375,16 +395,34 @@ public class UnidadDistribucion{
 		return llaveSimServidor;
 	}
 
-	public SecretKey descifrar(byte [] cipheredText) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+	public byte[] descifrar(byte[] mensaje, String algoritmo, Key llave) throws IOException {
+		byte[] descifrado = null;
+		try {
+			Cipher descifrador = Cipher.getInstance(algoritmo); 
+			descifrador.init(Cipher.DECRYPT_MODE, llave);
+			descifrado = descifrador.doFinal(mensaje);
+		} catch (Exception e) {
 
+		}
+		return descifrado;
 
-		Cipher decifrador = Cipher.getInstance(asim);
-		decifrador.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
-		byte[] llaveDecifrada = decifrador.doFinal(cipheredText);
+	}
 
-		SecretKeySpec llaveRecibida = new SecretKeySpec(llaveDecifrada, sim);
-		return llaveRecibida;
+	public byte[] cifrar(byte[] mensaje, String algoritmo, Key llave) throws IOException {
+		byte[] cifrado = null;
+		try {
+			Cipher cifrador = Cipher.getInstance(algoritmo);
+			cifrador.init(1, llave);
+			cifrado = cifrador.doFinal(mensaje);
+		} catch (Exception e) {
 
+		}
+
+		return cifrado;
+	}
+
+	public static String hexadecimal(byte[] mensajeArreglo) {
+		return DatatypeConverter.printHexBinary(mensajeArreglo);
 	}
 
 	public static byte[] symmetricEncryption (byte[] msg, Key key , String algo)
