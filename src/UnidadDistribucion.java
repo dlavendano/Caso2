@@ -26,6 +26,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.security.cert.Certificate;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 
 import sun.security.x509.*;
 import java.security.cert.*;
@@ -46,35 +48,45 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.security.auth.x500.X500Principal;
 import javax.xml.bind.DatatypeConverter;
 
-//import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
-//import org.bouncycastle.asn1.x509.X509Extensions;
-//import org.bouncycastle.crypto.KeyGenerationParameters;
-//import org.bouncycastle.crypto.util.PublicKeyFactory;
-//import org.bouncycastle.jcajce.provider.asymmetric.X509;
-//import org.bouncycastle.jcajce.provider.asymmetric.rsa.KeyPairGeneratorSpi;
-//import org.bouncycastle.util.encoders.Base64;
-//import org.bouncycastle.util.io.pem.PemObject;
-//import org.bouncycastle.util.io.pem.PemReader;
-//import org.bouncycastle.util.io.pem.PemWriter;
-//import org.bouncycastle.x509.X509V1CertificateGenerator;
-//import org.bouncycastle.x509.X509V3CertificateGenerator;
+import org.bouncycastle.asn1.x500.X500NameBuilder;
+import org.bouncycastle.asn1.x500.style.BCStyle;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.OperatorCreationException;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.util.io.pem.PemObject;
+import org.bouncycastle.util.io.pem.PemWriter;
+
+import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
+import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.crypto.KeyGenerationParameters;
+import org.bouncycastle.crypto.util.PublicKeyFactory;
+import org.bouncycastle.jcajce.provider.asymmetric.X509;
+import org.bouncycastle.jcajce.provider.asymmetric.rsa.KeyPairGeneratorSpi;
+import org.bouncycastle.util.encoders.Base64;
+import org.bouncycastle.util.io.pem.PemObject;
+import org.bouncycastle.util.io.pem.PemReader;
+import org.bouncycastle.util.io.pem.PemWriter;
+import org.bouncycastle.x509.X509V1CertificateGenerator;
+import org.bouncycastle.x509.X509V3CertificateGenerator;
 public class UnidadDistribucion{
 
 	private final static String IP = "localhost";
-	private int PUERTO = 4444;
+	private int PUERTO = 4443;
 
 
-	private String INIC = "HOLA";
+	private String INIC = "INICIO";
 	private String ALG = "ALGORITMOS";
-	private String CERTIFICADOCL = "CERCLNT";
-	private String CERTIFICADOSV = "CERSRV";
+	private String CERTIFICADOCL = "CERTCLNT";
+	private String CERTIFICADOSV = "CERTSRV";
 
 
-	//SimÈtricos
+	//Sim√©tricos
 	public final static String BLOWFISH = "BLOWFISH";
 	public final static String AES = "AES";
 
-	//AsimÈtrico
+	//Asim√©trico
 	public final static String RSA = "RSA";
 
 	//HMAC
@@ -93,9 +105,10 @@ public class UnidadDistribucion{
 	private String asim;
 	private String hmac;
 
-	private Socket skt = null; 
-	private PrintWriter out = null; 
-	private BufferedReader in = null;
+	private Socket skt; 
+	private PrintWriter out; 
+	private BufferedReader in;
+	private InputStream is;
 
 	private KeyPair keyPair;
 	private SecretKey llaveSim;
@@ -119,22 +132,32 @@ public class UnidadDistribucion{
 
 
 
-	public void inicializar() throws IOException {
+	public void inicializar() throws Exception {
 		asignarAlgoritmos();
 		try{
 			skt = new Socket(IP, PUERTO);
 			out = new PrintWriter(skt.getOutputStream(), true);
-			in = new BufferedReader(new InputStreamReader(skt.getInputStream()));
+			is = skt.getInputStream();
+			in = new BufferedReader(new InputStreamReader(is));
 		}
 		catch(Exception e){
-			System.out.println("No iniciÛ nada del Stream");
+			System.out.println("No inici√≥ nada del Stream");
 		}
 		generarLlaves();
-		conexion4444();
+		if(PUERTO == 4444){
+			conexion4444();
+		}
+		else if(PUERTO == 4443){
+			conexion4443();
+			System.out.println("3");
+		}
+		else{
+			System.out.println("No hay puerto papi");
+		}
 
 	}
-	
-	public static void main(String[] args) throws IOException{
+
+	public static void main(String[] args) throws Exception{
 		UnidadDistribucion cli = new UnidadDistribucion();
 		cli.inicializar();
 	}
@@ -154,37 +177,33 @@ public class UnidadDistribucion{
 
 	}
 
-	public void conexion4444() throws IOException
+	public void conexion4444() throws Exception
 	{
 
 		out.println("HOLA");
 		String respuesta = in.readLine();
-		if(respuesta.equals("OK"))
+		if(respuesta.equals(INIC))
 		{
 			out.println(algs);
 
-			if(in.readLine().equals("OK"))
+			if(in.readLine().equals(ESTADO+SG+OK))
 			{
 				out.println(CERTIFICADOCL);
-				System.out.println("respuesta: "+in.readLine());
-				//Deberia ser "CERTSRV"
-				String noError = in.readLine();
-				if(noError != null || noError != ""){
-					System.out.println("siguiente: "+ noError);
-					if(noError.equals(CERTIFICADOSV)){
-						System.out.println("bien");
+
+				X509Certificate cert = generateV3Certificate(this.keyPair);
+				imprimircert(cert);
+				//				skt.getOutputStream().write(flujoDeBytes);
+				//				skt.getOutputStream().flush();
+				if(in.readLine().equals(ESTADO+SG+OK)){
+					if(in.readLine().equals(CERTIFICADOSV)){
+						out.println(ESTADO+SG+OK);
+						if(in.readLine().equals(INIC)){
+							out.println("ACT1");
+							out.println("ACT2");
+						}
 					}
 				}
-				System.out.println("certificado servidor: "+ in.readLine());
-				out.println("OK");
-				
-				System.out.println("respuesta: "+in.readLine());
-				out.println("CIFRADOKS+");
-				System.out.println("respuesta: "+in.readLine());
-				out.println("CIFRADOLS1");
-				
-				//Deberia ser "OK"
-				System.out.println("respuesta: "+in.readLine());
+//				System.out.println("respuesta: "+in.readLine());
 			}
 			else if(respuesta.equals("ERROR"))
 			{
@@ -200,29 +219,34 @@ public class UnidadDistribucion{
 
 		out.println("HOLA");
 		String respuesta = in.readLine();
-		if(respuesta.equals("OK"))
+		if(respuesta.equals(INIC))
 		{
 			out.println(algs);
 
-			if(in.readLine().equals("OK"))
+			if(in.readLine().equals(ESTADO+SG+OK))
 			{
-
+				out.println(CERTIFICADOCL);
 				try {
-					X509Certificate cert = Certificado.generateV3Certificate(keyPair);
+					X509Certificate cert = generateV3Certificate(this.keyPair);
 					imprimircert(cert);
-					X509Certificate certServ = 	leerCertificado();
-					byte[] arr = leerllave();
+					//					out.println(ESTADO+SG+OK);
+					if(in.readLine().equals(CERTIFICADOSV)){
+						out.println(ESTADO+SG+OK);
+						X509Certificate certServ = 	leerCertificado();
+						byte[] arr = leerllave();
+						llaveSim = descifrar(arr);
+						byte[] cifrada = cifrarLlave(certServ.getPublicKey());
+						String codificada = codificarHex(cifrada);
+						out.println(codificada);
+						consultar();
+						String serv =in.readLine();
+						leerResultado(serv);
+					}
+					
 
-					llaveSim = descifrar(arr);
-					byte[] cifrada = cifrarLlave(certServ.getPublicKey());
-					String codificada = codificarHex(cifrada);
-					out.println(codificada);
-					consultar();
-					String serv =in.readLine();
-					leerResultado(serv);
+					
 				}
 				catch (Exception e) {
-					// TODO: handle exception
 					e.printStackTrace();
 				}
 			}
@@ -233,6 +257,45 @@ public class UnidadDistribucion{
 		}	
 	}
 
+	/**
+	 * Se genera un certificado digital respecto a una llave.
+	 * En el certificado debe existir la informaci√≥n que genere losa datos de la entidad.
+	 * @param Keypair pair 
+	 * @return X509Certificate
+	 * @throws Exception
+	 */
+	public static X509Certificate generateV3Certificate(KeyPair pair) throws Exception {
+		X500NameBuilder nameBuilder = new X500NameBuilder(BCStyle.INSTANCE);
+		nameBuilder.addRDN(BCStyle.OU, "OU");
+		nameBuilder.addRDN(BCStyle.O, "O");
+		nameBuilder.addRDN(BCStyle.CN, "CN");
+		String stringDate1 = "2016-10-01";
+		String stringDate2 = "2020-12-20";
+		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+		Date notBefore = null;
+		Date notAfter = null;
+		try {
+			notBefore = format.parse(stringDate1);
+			notAfter = format.parse(stringDate2);
+		}
+		catch (ParseException e) {
+			e.printStackTrace();
+		}
+		BigInteger serialNumber = new BigInteger(128, new Random());
+		JcaX509v3CertificateBuilder certificateBuilder = new JcaX509v3CertificateBuilder(nameBuilder.build(), serialNumber, notBefore, notAfter, nameBuilder.build(), pair.getPublic());
+		X509Certificate certificate = null;
+		try {
+			ContentSigner contentSigner = new JcaContentSignerBuilder("SHA256WithRSAEncryption").build(pair.getPrivate());
+			certificate = new JcaX509CertificateConverter().getCertificate(certificateBuilder.build(contentSigner));
+		}
+		catch (OperatorCreationException e) {
+			e.printStackTrace();
+		}
+		catch (CertificateException e) {
+			e.printStackTrace();
+		}
+		return certificate;
+	}
 
 
 
@@ -258,7 +321,7 @@ public class UnidadDistribucion{
 
 	public void leerResultado(String resp) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException, NoSuchAlgorithmException, NoSuchPaddingException
 	{
-		String respuesta = codificarHex(symmetricDecryption(decodificarHex(resp), llaveSim, algS));
+		String respuesta = codificarHex(symmetricDecryption(decodificarHex(resp), llaveSim, sim));
 		System.out.println(respuesta);
 	}
 
@@ -268,9 +331,9 @@ public class UnidadDistribucion{
 		{
 			String consulta = "201517263";
 
-			byte[] digest = hmacDigest(consulta.getBytes(),llaveSim, algD);
-			byte[] consultaCifrada = symmetricEncryption(consulta.getBytes(), llaveSim, algS);
-			byte[] digestCifrado = symmetricEncryption(digest, llaveSim, algS);
+			byte[] digest = hmacDigest(consulta.getBytes(),llaveSim, hmac);
+			byte[] consultaCifrada = symmetricEncryption(consulta.getBytes(), llaveSim, sim);
+			byte[] digestCifrado = symmetricEncryption(digest, llaveSim, sim);
 			String resp = codificarHex(consultaCifrada)+":"+codificarHex(digestCifrado);
 			System.out.println(resp);
 			out.println(resp);
@@ -286,13 +349,16 @@ public class UnidadDistribucion{
 		pWrt.flush();
 	}
 
-	public X509Certificate leerCertificado()
+	public X509Certificate leerCertificado() throws IOException
 	{
 		X509Certificate cert = null;
+		byte[] certificadoClienteBytes = new byte['·éà'];
+		is.read(certificadoClienteBytes);
+		InputStream inputStream = new ByteArrayInputStream(certificadoClienteBytes);
 		try {
 			cert = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(is);
 			System.out.println(cert.toString());
-			out.println("OK");
+			out.println(ESTADO+SG+OK);
 
 		} catch (CertificateException e) {
 			// TODO Auto-generated catch block
@@ -312,11 +378,11 @@ public class UnidadDistribucion{
 	public SecretKey descifrar(byte [] cipheredText) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
 
 
-		Cipher decifrador = Cipher.getInstance(algA);
+		Cipher decifrador = Cipher.getInstance(asim);
 		decifrador.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 		byte[] llaveDecifrada = decifrador.doFinal(cipheredText);
 
-		SecretKeySpec llaveRecibida = new SecretKeySpec(llaveDecifrada, algS);
+		SecretKeySpec llaveRecibida = new SecretKeySpec(llaveDecifrada, sim);
 		return llaveRecibida;
 
 	}
@@ -333,11 +399,11 @@ public class UnidadDistribucion{
 
 	public byte[] cifrarLlave(Key key ) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException
 	{
-		KeyGenerator keygen = KeyGenerator.getInstance(algS);
+		KeyGenerator keygen = KeyGenerator.getInstance(sim);
 		keygen.init(128);
 		SecretKey llave = keygen.generateKey();
 
-		Cipher cifrador = Cipher.getInstance(algA);
+		Cipher cifrador = Cipher.getInstance(asim);
 		cifrador.init(Cipher.ENCRYPT_MODE, key);
 		byte [] encriptada = cifrador.doFinal(llave.getEncoded());
 
@@ -349,7 +415,7 @@ public class UnidadDistribucion{
 	{
 		byte[] ret = new byte[ss.length()/2];
 		for (int i = 0 ; i < ret.length ; i++) {
-			ret[i] = (byte) Integer.parseInt(ss.substring(i*2,(i+1)*2), 16);
+			ret[i] = (byte)Integer.parseInt(ss.substring(i*2,(i+1)*2), 16);
 		}
 		return ret;
 	}
