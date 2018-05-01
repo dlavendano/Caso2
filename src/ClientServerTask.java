@@ -22,6 +22,5 @@ public class ClientServerTask extends Task {
 			Client cliente = new Client();
 			cliente.sendMessageToServer("hola, soy el cliente");
 			cliente.waitForMessageFromServer();
-			System.out.println("Error al crear cliente");
 		}
 }

@@ -27,4 +27,8 @@ public class Generator {
 		return new ClientServerTask();
 	}
 
+	public static void main(String[] args) {
+		@SuppressWarnings("unused")
+		Generator gen = new Generator();
+	}
 }
