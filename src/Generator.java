@@ -26,15 +26,5 @@ public class Generator {
 	private Task createTask(){
 		return new ClientServerTask();
 	}
-	
-	/**
-	 * Starts the Application
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		@SuppressWarnings("unused")
-		Generator gen = new Generator();
-	}
-	
-	
+
 }

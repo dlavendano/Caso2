@@ -1,9 +1,10 @@
+import java.io.IOException;
+
 import uniandes.gload.core.Task;
 import uniandes.gload.examples.clientserver.Client;
 
 public class ClientServerTask extends Task {
-
-
+	
 	@Override
 	public void fail() {
 		// TODO Auto-generated method stub
@@ -17,10 +18,10 @@ public class ClientServerTask extends Task {
 	}
 
 	@Override
-	public void execute() {
-		// TODO Auto-generated method stub
-		Client client = new Client();
-		client.sendMessageToServer("Hi! i'm a client");
-		client.waitForMessageFromServer();
-	}
+	public void execute() {	
+			Client cliente = new Client();
+			cliente.sendMessageToServer("hola, soy el cliente");
+			cliente.waitForMessageFromServer();
+			System.out.println("Error al crear cliente");
+		}
 }
